@@ -39,6 +39,7 @@ type SamplesRequest struct {
 	dataLogger string
 	timeFrom   int64
 	timeTo     int64
+	SensorType string
 }
 
 func sumSamples(s SamplesResponse) (map[string]float64, int) {
@@ -80,10 +81,10 @@ func (a *SamplesRequest) GetSamples(aggregationLevel string, ch chan<- string) {
 
 	payload := url.Values{}
 	payload.Set("filter[data_logger]", a.dataLogger)
-	payload.Add("filter[type]", "main")
 	payload.Add("filter[from]", strconv.FormatInt(a.timeFrom, 10))
 	payload.Add("filter[to]", strconv.FormatInt(a.timeTo, 10))
 	payload.Add("aggregation_level", aggregationLevel)
+	payload.Add("filter[type]", a.SensorType)
 
 	res, err := http.Get(a.baseUrl + "?" + payload.Encode())
 
@@ -110,6 +111,7 @@ func main() {
 	cmdTo := flag.String("to", from.Format("2006-1-2"), "The upper date")
 	logger := flag.String("logger", "", "Id of the data-logger")
 	tz := flag.String("tz", "UTC", "The identifier of the timezone, Europe/Berlin")
+	SensorType := flag.String("type", "main", "SensorType - main, ct")
 
 	flag.Parse()
 
@@ -130,6 +132,7 @@ func main() {
 		dataLogger: *logger,
 		timeFrom:   lower.Unix(),
 		timeTo:     upper.Unix(),
+		SensorType: *SensorType,
 	}
 
 	ch := make(chan string)
