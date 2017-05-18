@@ -14,13 +14,24 @@ go install
 
 `eb-api-helper -from=2017-05-15 -to=2017-05-16 -logger=577bd2ba65622d0635000015`
 
-### Additional parameters
+### Required Arguments
+
+#### loggerId
+`-logger=577bd2ba65622d0635000015`
+
+### Additional arguments
+
+#### from (default start of yesterday)
+`-from=2017-05-15`
+
+#### to (default end of yesterday)
+`-to=2017-05-16`
 
 #### Timezone (default UTC)
 `-tz=Europe/Berlin` or `-tz=America/Los_Angeles`
 
 #### SensorType (default main)
-`-type=main` or `type=ct`
+`-type=main` or `-type=ct`
 
 ### Example Output:
 
