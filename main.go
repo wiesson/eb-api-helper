@@ -76,7 +76,7 @@ func formatCommandlineOutput(s SamplesResponse, aggregationLevel string) string 
 	return output
 }
 
-func (a *SamplesRequest) GetSamples(aggregationLevel string, ch chan<- string) {
+func (a SamplesRequest) GetSamples(aggregationLevel string, ch chan<- string) {
 	s := &SamplesResponse{}
 
 	payload := url.Values{}
@@ -127,7 +127,7 @@ func main() {
 
 	fmt.Println(lower, upper)
 
-	api := &SamplesRequest{
+	api := SamplesRequest{
 		baseUrl:    "https://api.internetofefficiency.com/v2/samples",
 		dataLogger: *logger,
 		timeFrom:   lower.Unix(),
