@@ -1,36 +1,41 @@
 package main
 
 import (
-	"net/http"
-	"fmt"
 	"encoding/json"
-	"net/url"
-	"strconv"
-	"time"
 	"flag"
+	"fmt"
+	"net/http"
+	"net/url"
 	"os"
 	"sort"
+	"strconv"
+	"time"
 )
+
+var sensorTypes = []string{
+	"main",
+	"ct",
+}
 
 type SamplesResponse struct {
 	Sample []Sample `json:"data"`
 }
 
 type Sample struct {
-	Type       string `json:"type"`
-	Id         string `json:"id"`
+	Type       string     `json:"type"`
+	Id         string     `json:"id"`
 	Attributes Attributes `json:"attributes"`
 }
 
 type Attributes struct {
-	Timestamp         int64 `json:"timestamp"`
-	SystemTemperature float32 `json:"system_temperature"`
+	Timestamp         int64     `json:"timestamp"`
+	SystemTemperature float32   `json:"system_temperature"`
 	EnergySamples     []Samples `json:"energy"`
 	PowerSamples      []Samples `json:"power"`
 }
 
 type Samples struct {
-	SensorId string `json:"sensor_id"`
+	SensorId string  `json:"sensor_id"`
 	Value    float64 `json:"value"`
 }
 
@@ -47,7 +52,7 @@ func sumSamples(s SamplesResponse) (map[string]float64, int) {
 	amount := len(s.Sample)
 
 	for _, sample := range s.Sample {
-		for _, energy := range sample.Attributes.EnergySamples {
+		for _, energy := range sample.Attributes.PowerSamples {
 			m[energy.SensorId] += energy.Value
 			m["total"] += energy.Value
 		}
@@ -84,7 +89,10 @@ func (a SamplesRequest) GetSamples(aggregationLevel string, ch chan<- string) {
 	payload.Add("filter[from]", strconv.FormatInt(a.timeFrom, 10))
 	payload.Add("filter[to]", strconv.FormatInt(a.timeTo, 10))
 	payload.Add("aggregation_level", aggregationLevel)
-	payload.Add("filter[type]", a.SensorType)
+
+	if a.SensorType != "" {
+		payload.Add("filter[type]", a.SensorType)
+	}
 
 	res, err := http.Get(a.baseUrl + "?" + payload.Encode())
 
@@ -103,6 +111,15 @@ func Bod(t time.Time) time.Time {
 	return time.Date(year, month, day, 0, 0, 0, 0, t.Location())
 }
 
+func stringContainSlice(a string, list []string) bool {
+	for _, b := range list {
+		if b == a {
+			return true
+		}
+	}
+	return false
+}
+
 func main() {
 	start := Bod(time.Now().AddDate(0, 0, -2))
 	from := start.AddDate(0, 0, 1)
@@ -111,13 +128,20 @@ func main() {
 	cmdTo := flag.String("to", from.Format("2006-1-2"), "The upper date")
 	logger := flag.String("logger", "", "Id of the data-logger")
 	tz := flag.String("tz", "UTC", "The identifier of the timezone, Europe/Berlin")
-	SensorType := flag.String("type", "main", "SensorType - main, ct")
+	sensorType := flag.String("type", "main", "SensorType - main, ct")
 
 	flag.Parse()
 
 	if *logger == "" {
 		fmt.Println("Please enter a logger id --logger=")
 		os.Exit(0)
+	}
+
+	if *sensorType != "main" {
+		if !stringContainSlice(*sensorType, sensorTypes) {
+			fmt.Println("Please use a valid energy type", sensorTypes)
+			os.Exit(0)
+		}
 	}
 
 	var loc, _ = time.LoadLocation(*tz)
@@ -132,7 +156,7 @@ func main() {
 		dataLogger: *logger,
 		timeFrom:   lower.Unix(),
 		timeTo:     upper.Unix(),
-		SensorType: *SensorType,
+		SensorType: *sensorType,
 	}
 
 	ch := make(chan string)
