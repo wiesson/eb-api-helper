@@ -39,7 +39,7 @@ type Samples struct {
 	Value    float64 `json:"value"`
 }
 
-type SamplesRequest struct {
+type API struct {
 	baseUrl    string
 	dataLogger string
 	timeFrom   int64
@@ -81,7 +81,7 @@ func formatCommandlineOutput(s SamplesResponse, aggregationLevel string) string 
 	return output
 }
 
-func (a SamplesRequest) GetSamples(aggregationLevel string, ch chan<- string) {
+func (a *API) GetSamples(aggregationLevel string, ch chan<- string) {
 	s := &SamplesResponse{}
 
 	payload := url.Values{}
@@ -151,7 +151,7 @@ func main() {
 
 	fmt.Println(lower, upper)
 
-	api := SamplesRequest{
+	api := API{
 		baseUrl:    "https://api.internetofefficiency.com/v2/samples",
 		dataLogger: *logger,
 		timeFrom:   lower.Unix(),
