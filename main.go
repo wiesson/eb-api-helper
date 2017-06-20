@@ -52,7 +52,7 @@ func sumSamples(s SamplesResponse) (map[string]float64, int) {
 	amount := len(s.Sample)
 
 	for _, sample := range s.Sample {
-		for _, energy := range sample.Attributes.PowerSamples {
+		for _, energy := range sample.Attributes.EnergySamples {
 			m[energy.SensorId] += energy.Value
 			m["total"] += energy.Value
 		}
