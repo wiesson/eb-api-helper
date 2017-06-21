@@ -42,6 +42,7 @@ type Samples struct {
 type API struct {
 	baseUrl    string
 	dataLogger string
+	site       string
 	timeFrom   int64
 	timeTo     int64
 	SensorType string
@@ -85,10 +86,15 @@ func (a *API) GetSamples(aggregationLevel string, ch chan<- string) {
 	s := &SamplesResponse{}
 
 	payload := url.Values{}
-	payload.Set("filter[data_logger]", a.dataLogger)
+	payload.Set("aggregation_level", aggregationLevel)
 	payload.Add("filter[from]", strconv.FormatInt(a.timeFrom, 10))
 	payload.Add("filter[to]", strconv.FormatInt(a.timeTo, 10))
-	payload.Add("aggregation_level", aggregationLevel)
+
+	if a.dataLogger != "" {
+		payload.Add("filter[data_logger]", a.dataLogger)
+	} else {
+		payload.Add("filter[site]", a.site)
+	}
 
 	if a.SensorType != "" {
 		payload.Add("filter[type]", a.SensorType)
@@ -127,13 +133,14 @@ func main() {
 	cmdFrom := flag.String("from", start.Format("2006-1-2"), "The lower date")
 	cmdTo := flag.String("to", from.Format("2006-1-2"), "The upper date")
 	logger := flag.String("logger", "", "Id of the data-logger")
+	site := flag.String("site", "", "Id of the site")
 	tz := flag.String("tz", "UTC", "The identifier of the timezone, Europe/Berlin")
 	sensorType := flag.String("type", "main", "SensorType - main, ct")
 
 	flag.Parse()
 
-	if *logger == "" {
-		fmt.Println("Please enter a logger id --logger=")
+	if *logger == "" && *site == "" {
+		fmt.Println("Please enter a logger id --logger=<LOGGER_ID> or a site id --site=<SITE_ID>")
 		os.Exit(0)
 	}
 
@@ -154,6 +161,7 @@ func main() {
 	api := API{
 		baseUrl:    "https://api.internetofefficiency.com/v2/samples",
 		dataLogger: *logger,
+		site:       *site,
 		timeFrom:   lower.Unix(),
 		timeTo:     upper.Unix(),
 		SensorType: *sensorType,
