@@ -18,10 +18,16 @@ var sensorTypes = []string{
 }
 
 type SamplesResponse struct {
-	Sample []Sample `json:"data"`
+	Sample []ResponseData `json:"data"`
+	Meta   struct {
+		SampleInterval uint `json:"sample_interval"`
+	} `json:"meta"`
+	Links struct {
+		NextURL string `json:"next"`
+	} `json:"links"`
 }
 
-type Sample struct {
+type ResponseData struct {
 	Type       string     `json:"type"`
 	Id         string     `json:"id"`
 	Attributes Attributes `json:"attributes"`
@@ -89,6 +95,7 @@ func (a *API) GetSamples(aggregationLevel string, ch chan<- string) {
 	payload.Set("aggregation_level", aggregationLevel)
 	payload.Add("filter[from]", strconv.FormatInt(a.timeFrom, 10))
 	payload.Add("filter[to]", strconv.FormatInt(a.timeTo, 10))
+	payload.Add("filter[samples]", "timestamp,power,energy")
 
 	if a.dataLogger != "" {
 		payload.Add("filter[data_logger]", a.dataLogger)
@@ -117,7 +124,7 @@ func Bod(t time.Time) time.Time {
 	return time.Date(year, month, day, 0, 0, 0, 0, t.Location())
 }
 
-func stringContainSlice(a string, list []string) bool {
+func inSlice(a string, list []string) bool {
 	for _, b := range list {
 		if b == a {
 			return true
@@ -140,12 +147,12 @@ func main() {
 	flag.Parse()
 
 	if *logger == "" && *site == "" {
-		fmt.Println("Please enter a logger id --logger=<LOGGER_ID> or a site id --site=<SITE_ID>")
+		fmt.Println("Please enter a logger id -logger <LOGGER_ID> or a site id -site <SITE_ID>")
 		os.Exit(0)
 	}
 
 	if *sensorType != "main" {
-		if !stringContainSlice(*sensorType, sensorTypes) {
+		if inSlice(*sensorType, sensorTypes) == false {
 			fmt.Println("Please use a valid energy type", sensorTypes)
 			os.Exit(0)
 		}
