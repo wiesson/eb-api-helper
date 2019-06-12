@@ -7,9 +7,9 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"sort"
 	"strconv"
 	"time"
+	"sort"
 )
 
 var sensorTypes = []string{
@@ -18,8 +18,8 @@ var sensorTypes = []string{
 }
 
 type SamplesResponse struct {
-	Sample []ResponseData `json:"data"`
-	Meta   struct {
+	Sample []SamplesResponseData `json:"data"`
+	Meta struct {
 		SampleInterval uint `json:"sample_interval"`
 	} `json:"meta"`
 	Links struct {
@@ -27,22 +27,54 @@ type SamplesResponse struct {
 	} `json:"links"`
 }
 
-type ResponseData struct {
-	Type       string     `json:"type"`
-	Id         string     `json:"id"`
-	Attributes Attributes `json:"attributes"`
+type SamplesResponseData struct {
+	Type string `json:"type"`
+	Id   string `json:"id"`
+	Attributes struct {
+		Timestamp             int64            `json:"timestamp"`
+		SystemTemperature     float32          `json:"system_temperature"`
+		PowerResponseSamples  []ResponseSample `json:"power"`
+		EnergyResponseSamples []ResponseSample `json:"energy"`
+	} `json:"attributes"`
 }
 
-type Attributes struct {
-	Timestamp         int64     `json:"timestamp"`
-	SystemTemperature float32   `json:"system_temperature"`
-	EnergySamples     []Samples `json:"energy"`
-	PowerSamples      []Samples `json:"power"`
-}
-
-type Samples struct {
-	SensorId string  `json:"sensor_id"`
+type ResponseSample struct {
+	SensorID string  `json:"sensor_id"`
 	Value    float64 `json:"value"`
+}
+
+type Reading float64
+
+func (r Reading) String() string {
+	return strconv.FormatFloat(float64(r), 'f', 8, 64)
+}
+
+type Sample struct {
+	Timestamp int64
+	DateTime  time.Time
+	Samples   map[string]Reading
+	Values    []float64
+	Energy    []ResponseSample
+}
+
+type Data []Sample
+
+func (d *Data) AddItem(value SamplesResponseData) {
+	DateTime := time.Unix(value.Attributes.Timestamp, 0)
+
+	row := &Sample{
+		Timestamp: value.Attributes.Timestamp,
+		DateTime:  DateTime,
+		Samples:   make(map[string]Reading),
+	}
+
+	for _, sample := range value.Attributes.EnergyResponseSamples {
+		row.Samples[sample.SensorID] = Reading(sample.Value)
+		row.Values = append(row.Values, sample.Value)
+		row.Energy = append(row.Energy, sample)
+	}
+
+	*d = append(*d, *row)
 }
 
 type API struct {
@@ -54,13 +86,13 @@ type API struct {
 	SensorType string
 }
 
-func sumSamples(s SamplesResponse) (map[string]float64, int) {
+func sumSamples(d Data) (map[string]float64, int) {
 	m := make(map[string]float64)
-	amount := len(s.Sample)
+	amount := len(d)
 
-	for _, sample := range s.Sample {
-		for _, energy := range sample.Attributes.EnergySamples {
-			m[energy.SensorId] += energy.Value
+	for _, sample := range d {
+		for _, energy := range sample.Energy {
+			m[energy.SensorID] += energy.Value
 			m["total"] += energy.Value
 		}
 	}
@@ -68,9 +100,8 @@ func sumSamples(s SamplesResponse) (map[string]float64, int) {
 	return m, amount
 }
 
-func formatCommandlineOutput(s SamplesResponse, aggregationLevel string) string {
-	sumValues, samplesCount := sumSamples(s)
-
+func formatCommandlineOutput(d Data, aggregationLevel string) string {
+	sumValues, samplesCount := sumSamples(d)
 	var output string
 
 	var sensorIds []string
@@ -88,8 +119,10 @@ func formatCommandlineOutput(s SamplesResponse, aggregationLevel string) string 
 	return output
 }
 
-func (a *API) GetSamples(aggregationLevel string, ch chan<- string) {
-	s := &SamplesResponse{}
+func (a *API) GetRequestPath(path string, aggregationLevel string) string {
+	if path != "" {
+		return path
+	}
 
 	payload := url.Values{}
 	payload.Set("aggregation_level", aggregationLevel)
@@ -107,16 +140,49 @@ func (a *API) GetSamples(aggregationLevel string, ch chan<- string) {
 		payload.Add("filter[type]", a.SensorType)
 	}
 
-	res, err := http.Get(a.baseUrl + "?" + payload.Encode())
+	return "/v2/samples/?" + payload.Encode()
+}
 
+func (a *API) Get(url string) (SamplesResponse, error) {
+	res, err := http.Get(a.baseUrl + url)
+	defer res.Body.Close()
 	if err != nil {
-		panic(err)
+		return SamplesResponse{}, err
 	}
 
-	defer res.Body.Close()
-
+	s := &SamplesResponse{}
 	err = json.NewDecoder(res.Body).Decode(s)
-	ch <- formatCommandlineOutput(*s, aggregationLevel)
+	if err != nil {
+		return SamplesResponse{}, err
+	}
+
+	return *s, nil
+}
+
+func (a *API) GetSamples(aggregationLevel string, ch chan<- string) {
+	d := &Data{}
+
+	nextUrl := a.GetRequestPath("", aggregationLevel)
+	hasNext := true
+
+	for hasNext {
+		s, err := a.Get(nextUrl)
+		if err != nil {
+			panic(err)
+		}
+
+		for _, value := range s.Sample {
+			d.AddItem(value)
+		}
+
+		nextUrl = s.Links.NextURL
+		if nextUrl == "" {
+			hasNext = false
+			break
+		}
+	}
+
+	ch <- formatCommandlineOutput(*d, aggregationLevel)
 }
 
 func Bod(t time.Time) time.Time {
@@ -166,7 +232,7 @@ func main() {
 	fmt.Println(lower, upper)
 
 	api := API{
-		baseUrl:    "https://api.internetofefficiency.com/v2/samples",
+		baseUrl:    "https://api.internetofefficiency.com",
 		dataLogger: *logger,
 		site:       *site,
 		timeFrom:   lower.Unix(),
